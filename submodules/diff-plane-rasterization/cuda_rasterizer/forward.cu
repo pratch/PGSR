@@ -291,7 +291,8 @@ renderCUDA(
 	int* __restrict__ out_observe,
 	float* __restrict__ out_all_map,
 	float* __restrict__ out_plane_depth,
-	const bool render_geo)
+	const bool render_geo,
+	const bool use_median_depth)
 {
 	// Identify current tile and associated min/max pixel range.
 	auto block = cg::this_thread_block();
@@ -323,6 +324,9 @@ renderCUDA(
 	uint32_t last_contributor = 0;
 	float C[CHANNELS] = { 0 };
 	float All_map[ALL_MAP] = { 0 };
+	float median_n[3] = { 0 };
+	float median_d = 0.0f;
+	bool median_found = false;
 	// Iterate over batches until all done or range is complete
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
 	{
@@ -382,6 +386,16 @@ renderCUDA(
 			{
 				atomicAdd(&(out_observe[collected_id[j]]), 1);
 			}
+
+			if (render_geo && use_median_depth && !median_found && test_T <= 0.5f)
+			{
+				median_n[0] = all_map[collected_id[j] * ALL_MAP + 0];
+				median_n[1] = all_map[collected_id[j] * ALL_MAP + 1];
+				median_n[2] = all_map[collected_id[j] * ALL_MAP + 2];
+				median_d    = all_map[collected_id[j] * ALL_MAP + 4];
+				median_found = true;
+			}
+
 			T = test_T;
 
 			// Keep track of last range entry to update this
@@ -401,7 +415,16 @@ renderCUDA(
 		if (render_geo) {
 			for (int ch = 0; ch < ALL_MAP; ch++)
 				out_all_map[ch * H * W + pix_id] = All_map[ch];
-			out_plane_depth[pix_id] = All_map[4] / -(All_map[0] * ray.x + All_map[1] * ray.y + All_map[2] + 1.0e-8);
+			if (use_median_depth && median_found) {
+				float depth_val = median_d / -(median_n[0] * ray.x + median_n[1] * ray.y + median_n[2] + 1.0e-8);
+				if (depth_val > 0.0f && depth_val < 100.0f) {
+					out_plane_depth[pix_id] = depth_val;
+				} else {
+					out_plane_depth[pix_id] = All_map[4] / -(All_map[0] * ray.x + All_map[1] * ray.y + All_map[2] + 1.0e-8);
+				}
+			} else {
+				out_plane_depth[pix_id] = All_map[4] / -(All_map[0] * ray.x + All_map[1] * ray.y + All_map[2] + 1.0e-8);
+			}
 		}
 	}
 }
@@ -426,7 +449,8 @@ void FORWARD::render(
 	int* out_observe,
 	float* out_all_map,
 	float* out_plane_depth,
-	const bool render_geo)
+	const bool render_geo,
+	const bool use_median_depth)
 {
 	renderCUDA<NUM_CHANNELS,NUM_ALL_MAP> << <grid, block >> > (
 		ranges,
@@ -447,7 +471,8 @@ void FORWARD::render(
 		out_observe,
 		out_all_map,
 		out_plane_depth,
-		render_geo);
+		render_geo,
+		use_median_depth);
 }
 
 void FORWARD::preprocess(int P, int D, int M,

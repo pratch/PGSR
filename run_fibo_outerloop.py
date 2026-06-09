@@ -43,7 +43,8 @@ import numpy as np
 from plyfile import PlyData
 from PIL import Image
 
-# Add the project root to python path to resolve modules
+# Add the local submodules and project root to python path to resolve modules
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "submodules", "diff-plane-rasterization"))
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from gaussian_renderer import render
@@ -334,6 +335,7 @@ def main():
     # Dummy args to allow compatibility with previous shell configs
     parser.add_argument("--scenes", type=str, nargs="*", help="Scene name(s) (unused)")
     parser.add_argument("--preview-only", action="store_true", help="Unused dummy argument")
+    parser.add_argument("--median_depth", action="store_true", help="Use median depth instead of alpha-blended depth")
     args = parser.parse_args()
 
     # Determine threshold and dilate iterations from configs.yaml if available
@@ -458,7 +460,8 @@ def main():
                 pipe=pipeline,
                 bg_color=background,
                 return_plane=True,
-                return_depth_normal=True
+                return_depth_normal=True,
+                use_median_depth=args.median_depth
             )
 
         # 1. Save standard RGB image

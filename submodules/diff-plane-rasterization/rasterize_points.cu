@@ -54,6 +54,7 @@ RasterizeGaussiansCUDA(
 	const torch::Tensor& campos,
 	const bool prefiltered,
 	const bool render_geo,
+	const bool use_median_depth,
 	const bool debug)
 {
   if (means3D.ndimension() != 2 || means3D.size(1) != 3) {
@@ -119,6 +120,7 @@ RasterizeGaussiansCUDA(
 		out_all_map.contiguous().data<float>(),
 		out_plane_depth.contiguous().data<float>(),
 		render_geo,
+		use_median_depth,
 		debug);
   }
   return std::make_tuple(rendered, out_color, radii, out_observe, out_all_map, out_plane_depth, geomBuffer, binningBuffer, imgBuffer);

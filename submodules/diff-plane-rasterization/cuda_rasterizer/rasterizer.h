@@ -55,6 +55,7 @@ namespace CudaRasterizer
 			float* out_all_map,
 			float* out_plane_depth,
 			const bool render_geo,
+			const bool use_median_depth,
 			bool debug = false);
 
 		static void backward(

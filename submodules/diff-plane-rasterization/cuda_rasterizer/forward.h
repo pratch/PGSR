@@ -68,7 +68,8 @@ namespace FORWARD
 		int* out_observe,
 		float* out_all_map,
 		float* out_plane_depth,
-		const bool render_geo);
+		const bool render_geo,
+		const bool use_median_depth);
 }
 
 

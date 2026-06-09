@@ -43,7 +43,8 @@ import numpy as np
 from plyfile import PlyData
 from PIL import Image
 
-# Add the project root to python path to resolve modules
+# Add the local submodules and project root to python path to resolve modules
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "submodules", "diff-plane-rasterization"))
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from gaussian_renderer import render
@@ -111,6 +112,7 @@ def main():
     parser.add_argument("--ply", type=str, required=True, help="Path to trained ply file")
     parser.add_argument("--camera", type=str, required=True, help="Path to camera view txt file")
     parser.add_argument("--output_dir", type=str, default="output", help="Directory to save the rendered output")
+    parser.add_argument("--median_depth", action="store_true", help="Use median depth (where transmittance crosses 0.5) instead of alpha-blended depth")
     args = parser.parse_args()
 
     # Create output directory
@@ -194,7 +196,8 @@ def main():
             pipe=pipeline,
             bg_color=background,
             return_plane=True,
-            return_depth_normal=True
+            return_depth_normal=True,
+            use_median_depth=args.median_depth
         )
 
     # Extract depth
