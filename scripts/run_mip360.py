@@ -3,10 +3,11 @@ import os
 scenes = ['bicycle', 'bonsai', 'counter', 'flowers', 'garden', 'kitchen', 'room', 'stump', 'treehill']
 factors = ['4', '2', '2', '4', '4', '2', '2', '4', '4']
 data_devices = ['cpu', 'cuda', 'cuda', 'cuda', 'cuda', 'cuda', 'cuda', 'cuda', 'cuda']
-data_base_path='mip360'
+# data_base_path='mip360'
+data_base_path='/projects/datasets/MipNeRF360'
 out_base_path='output_mip360'
 out_name='test'
-gpu_id=0
+gpu_id=1
 
 for id, scene in enumerate(scenes):
 

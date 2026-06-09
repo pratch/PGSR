@@ -75,6 +75,7 @@ def render_set(model_path, name, iteration, views, scene, gaussians, pipeline, b
     makedirs(render_normal_path, exist_ok=True)
 
     depths_tsdf_fusion = []
+    original_resolutions = []  # Store original (H, W) for each view
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
         gt, _ = view.get_image()
         out = render(view, gaussians, pipeline, background, app_model=app_model)
@@ -111,9 +112,31 @@ def render_set(model_path, name, iteration, views, scene, gaussians, pipeline, b
             mask = angle > (80.0 / 180 * 3.14159)
             depth_tsdf[mask] = 0
         depths_tsdf_fusion.append(depth_tsdf.squeeze().cpu())
+        original_resolutions.append((H, W))  # Store original resolution
         
     if volume is not None:
-        depths_tsdf_fusion = torch.stack(depths_tsdf_fusion, dim=0)
+        # Find the most common resolution to resize all depth maps to
+        from collections import Counter
+        shapes = [d.shape for d in depths_tsdf_fusion]
+        most_common_shape = Counter(shapes).most_common(1)[0][0]
+        target_H, target_W = most_common_shape
+        
+        # Resize all depth maps to the most common resolution
+        resized_depths = []
+        for depth in depths_tsdf_fusion:
+            if depth.shape != most_common_shape:
+                # Resize using bilinear interpolation
+                depth_resized = torch.nn.functional.interpolate(
+                    depth.unsqueeze(0).unsqueeze(0), 
+                    size=most_common_shape, 
+                    mode='bilinear', 
+                    align_corners=False
+                ).squeeze()
+                resized_depths.append(depth_resized)
+            else:
+                resized_depths.append(depth)
+        
+        depths_tsdf_fusion = torch.stack(resized_depths, dim=0)
         for idx, view in enumerate(tqdm(views, desc="TSDF Fusion progress")):
             ref_depth = depths_tsdf_fusion[idx].cuda()
 
@@ -125,13 +148,31 @@ def render_set(model_path, name, iteration, views, scene, gaussians, pipeline, b
             pose = np.identity(4)
             pose[:3,:3] = view.R.transpose(-1,-2)
             pose[:3, 3] = view.T
+            
+            # Load and resize color image to match the depth resolution
             color = o3d.io.read_image(os.path.join(render_path, view.image_name + ".jpg"))
+            orig_H, orig_W = original_resolutions[idx]
+            if (orig_H, orig_W) != (target_H, target_W):
+                # Resize color image to match depth
+                color_np = np.asarray(color)
+                color_resized = cv2.resize(color_np, (target_W, target_H), interpolation=cv2.INTER_LINEAR)
+                color = o3d.geometry.Image(color_resized)
+            
             depth = o3d.geometry.Image((ref_depth*1000).astype(np.uint16))
             rgbd = o3d.geometry.RGBDImage.create_from_color_and_depth(
                 color, depth, depth_scale=1000.0, depth_trunc=max_depth, convert_rgb_to_intensity=False)
+            
+            # Adjust intrinsics for the resized resolution
+            scale_x = target_W / orig_W
+            scale_y = target_H / orig_H
+            adjusted_fx = view.Fx * scale_x
+            adjusted_fy = view.Fy * scale_y
+            adjusted_cx = view.Cx * scale_x
+            adjusted_cy = view.Cy * scale_y
+            
             volume.integrate(
                 rgbd,
-                o3d.camera.PinholeCameraIntrinsic(W, H, view.Fx, view.Fy, view.Cx, view.Cy),
+                o3d.camera.PinholeCameraIntrinsic(target_W, target_H, adjusted_fx, adjusted_fy, adjusted_cx, adjusted_cy),
                 pose)
 
 def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool,

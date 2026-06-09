@@ -126,7 +126,7 @@ def pair_id_to_image_ids(pair_id):
 
 def array_to_blob(array):
     if IS_PYTHON3:
-        return array.tostring()
+        return array.tobytes()
     else:
         return np.getbuffer(array)
 
@@ -173,7 +173,7 @@ class COLMAPDatabase(sqlite3.Connection):
         return cursor.lastrowid
 
     def add_image(self, name, camera_id,
-                  prior_q=np.full(4, np.NaN), prior_t=np.full(3, np.NaN), image_id=None):
+                  prior_q=np.full(4, np.nan), prior_t=np.full(3, np.nan), image_id=None):
         cursor = self.execute(
             "INSERT INTO images VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (image_id, name, camera_id, prior_q[0], prior_q[1], prior_q[2],

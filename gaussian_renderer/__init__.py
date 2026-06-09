@@ -161,6 +161,7 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
                     "radii": radii,
                     "out_observe": out_observe,
                     "rendered_normal": rendered_normal,
+                    "rendered_alpha": rendered_alpha,
                     "plane_depth": plane_depth,
                     "rendered_distance": rendered_distance
                     }

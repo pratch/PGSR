@@ -9,6 +9,7 @@ def init_colmap(args):
     colmap_command = '"{}"'.format(args.colmap_executable) if len(args.colmap_executable) > 0 else "colmap"
     magick_command = '"{}"'.format(args.magick_executable) if len(args.magick_executable) > 0 else "magick"
     use_gpu = 1 if not args.no_gpu else 0
+    single_camera = 0 if args.multi_camera else 1
     scene_list = os.listdir(args.data_path)
     for scene in scene_list:
         scene_path = os.path.join(args.data_path, scene)
@@ -22,7 +23,7 @@ def init_colmap(args):
         feat_extracton_cmd = colmap_command + " feature_extractor "\
             "--database_path " + scene_path + "/database.db \
             --image_path " + scene_path + "/input \
-            --ImageReader.single_camera 1 \
+            --ImageReader.single_camera " + str(single_camera) + " \
             --ImageReader.camera_model " + args.camera + " \
             --SiftExtraction.use_gpu " + str(use_gpu)
         exit_code = os.system(feat_extracton_cmd)
@@ -114,6 +115,7 @@ if __name__ == '__main__':
     parser.add_argument("--colmap_executable", default="", type=str)
     parser.add_argument("--resize", action="store_true")
     parser.add_argument("--magick_executable", default="", type=str)
+    parser.add_argument("--multi_camera", action='store_true')
     args = parser.parse_args()
 
     init_colmap(args)
