@@ -336,6 +336,7 @@ def main():
     parser.add_argument("--scenes", type=str, nargs="*", help="Scene name(s) (unused)")
     parser.add_argument("--preview-only", action="store_true", help="Unused dummy argument")
     parser.add_argument("--median_depth", action="store_true", help="Use median depth instead of alpha-blended depth")
+    parser.add_argument("--blend_depth", action="store_true", help="Alpha-blend individual depths instead of alpha-blending plane parameters first")
     args = parser.parse_args()
 
     # Determine threshold and dilate iterations from configs.yaml if available
@@ -461,7 +462,8 @@ def main():
                 bg_color=background,
                 return_plane=True,
                 return_depth_normal=True,
-                use_median_depth=args.median_depth
+                use_median_depth=args.median_depth,
+                use_blend_depth=args.blend_depth
             )
 
         # 1. Save standard RGB image

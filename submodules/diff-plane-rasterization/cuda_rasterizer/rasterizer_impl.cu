@@ -223,6 +223,7 @@ int CudaRasterizer::Rasterizer::forward(
 	float* out_plane_depth,
 	const bool render_geo,
 	const bool use_median_depth,
+	const bool use_blend_depth,
 	bool debug)
 {
 	const float focal_y = height / (2.0f * tan_fovy);
@@ -346,7 +347,8 @@ int CudaRasterizer::Rasterizer::forward(
 		out_all_map,
 		out_plane_depth,
 		render_geo,
-		use_median_depth), debug)
+		use_median_depth,
+		use_blend_depth), debug)
 
 	return num_rendered;
 }

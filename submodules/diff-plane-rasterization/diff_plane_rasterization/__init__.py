@@ -85,6 +85,7 @@ class _RasterizeGaussians(torch.autograd.Function):
             raster_settings.prefiltered,
             raster_settings.render_geo,
             raster_settings.use_median_depth,
+            raster_settings.use_blend_depth,
             raster_settings.debug
         )
 
@@ -185,6 +186,7 @@ class GaussianRasterizationSettings(NamedTuple):
     prefiltered : bool
     render_geo : bool
     use_median_depth : bool
+    use_blend_depth : bool
     debug : bool
 
 class GaussianRasterizer(nn.Module):

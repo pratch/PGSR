@@ -113,6 +113,7 @@ def main():
     parser.add_argument("--camera", type=str, required=True, help="Path to camera view txt file")
     parser.add_argument("--output_dir", type=str, default="output", help="Directory to save the rendered output")
     parser.add_argument("--median_depth", action="store_true", help="Use median depth (where transmittance crosses 0.5) instead of alpha-blended depth")
+    parser.add_argument("--blend_depth", action="store_true", help="Alpha-blend individual depths instead of alpha-blending plane parameters first")
     args = parser.parse_args()
 
     # Create output directory
@@ -197,7 +198,8 @@ def main():
             bg_color=background,
             return_plane=True,
             return_depth_normal=True,
-            use_median_depth=args.median_depth
+            use_median_depth=args.median_depth,
+            use_blend_depth=args.blend_depth
         )
 
     # Extract depth

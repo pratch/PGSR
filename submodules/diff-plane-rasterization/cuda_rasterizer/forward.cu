@@ -292,7 +292,8 @@ renderCUDA(
 	float* __restrict__ out_all_map,
 	float* __restrict__ out_plane_depth,
 	const bool render_geo,
-	const bool use_median_depth)
+	const bool use_median_depth,
+	const bool use_blend_depth)
 {
 	// Identify current tile and associated min/max pixel range.
 	auto block = cg::this_thread_block();
@@ -327,6 +328,7 @@ renderCUDA(
 	float median_n[3] = { 0 };
 	float median_d = 0.0f;
 	bool median_found = false;
+	float blended_depth = 0.0f;
 	// Iterate over batches until all done or range is complete
 	for (int i = 0; i < rounds; i++, toDo -= BLOCK_SIZE)
 	{
@@ -396,6 +398,14 @@ renderCUDA(
 				median_found = true;
 			}
 
+			if (render_geo && use_blend_depth)
+			{
+				float depth_val = all_map[collected_id[j] * ALL_MAP + 4] / -(all_map[collected_id[j] * ALL_MAP + 0] * ray.x + all_map[collected_id[j] * ALL_MAP + 1] * ray.y + all_map[collected_id[j] * ALL_MAP + 2] + 1.0e-8);
+				if (depth_val < 0.0f) depth_val = 0.0f;
+				if (depth_val > 100.0f) depth_val = 100.0f;
+				blended_depth += depth_val * alpha * T;
+			}
+
 			T = test_T;
 
 			// Keep track of last range entry to update this
@@ -421,6 +431,13 @@ renderCUDA(
 					out_plane_depth[pix_id] = depth_val;
 				} else {
 					out_plane_depth[pix_id] = All_map[4] / -(All_map[0] * ray.x + All_map[1] * ray.y + All_map[2] + 1.0e-8);
+				}
+			} else if (use_blend_depth) {
+				float denom = 1.0f - T;
+				if (denom > 1e-4f) {
+					out_plane_depth[pix_id] = blended_depth / denom;
+				} else {
+					out_plane_depth[pix_id] = 0.0f;
 				}
 			} else {
 				out_plane_depth[pix_id] = All_map[4] / -(All_map[0] * ray.x + All_map[1] * ray.y + All_map[2] + 1.0e-8);
@@ -450,7 +467,8 @@ void FORWARD::render(
 	float* out_all_map,
 	float* out_plane_depth,
 	const bool render_geo,
-	const bool use_median_depth)
+	const bool use_median_depth,
+	const bool use_blend_depth)
 {
 	renderCUDA<NUM_CHANNELS,NUM_ALL_MAP> << <grid, block >> > (
 		ranges,
@@ -472,7 +490,8 @@ void FORWARD::render(
 		out_all_map,
 		out_plane_depth,
 		render_geo,
-		use_median_depth);
+		use_median_depth,
+		use_blend_depth);
 }
 
 void FORWARD::preprocess(int P, int D, int M,

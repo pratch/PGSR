@@ -33,7 +33,7 @@ def render_normal(viewpoint_cam, depth, offset=None, normal=None, scale=1):
     return normal_ref
 
 def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, scaling_modifier = 1.0, override_color = None, 
-           app_model: AppModel=None, return_plane = True, return_depth_normal = True, use_median_depth = False):
+           app_model: AppModel=None, return_plane = True, return_depth_normal = True, use_median_depth = False, use_blend_depth = False):
     """
     Render the scene. 
     
@@ -100,6 +100,7 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
             prefiltered=False,
             render_geo=return_plane,
             use_median_depth=use_median_depth,
+            use_blend_depth=use_blend_depth,
             debug=pipe.debug
         )
 
