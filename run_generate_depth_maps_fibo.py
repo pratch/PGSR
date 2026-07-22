@@ -53,27 +53,14 @@ from scene.cameras import Camera
 from utils.graphics_utils import focal2fov, getProjectionMatrixCenterShift, normal_from_depth_image
 
 def load_simple_yaml(file_path):
-    defaults = {}
-    scenes = []
-    current_section = None
-    current_scene = None
-    
+    config = {}
+    if not os.path.exists(file_path):
+        return config
     with open(file_path, "r", encoding="utf-8") as f:
         for line in f:
             line_clean = line.split("#")[0].strip()
             if not line_clean:
                 continue
-            if line_clean.startswith("scenes:"):
-                current_section = "scenes"
-                continue
-            elif line_clean.startswith("defaults:"):
-                current_section = "defaults"
-                continue
-            if line_clean.startswith("- "):
-                line_clean = line_clean[2:].strip()
-                if current_section == "scenes":
-                    current_scene = {}
-                    scenes.append(current_scene)
             if ":" in line_clean:
                 parts = line_clean.split(":", 1)
                 k = parts[0].strip()
@@ -82,6 +69,8 @@ def load_simple_yaml(file_path):
                     v = True
                 elif v_str.lower() == "false":
                     v = False
+                elif v_str.lower() == "none" or v_str == "":
+                    v = None
                 else:
                     try:
                         if "." in v_str:
@@ -90,11 +79,8 @@ def load_simple_yaml(file_path):
                             v = int(v_str)
                     except ValueError:
                         v = v_str
-                if current_section == "defaults":
-                    defaults[k] = v
-                elif current_section == "scenes" and current_scene is not None:
-                    current_scene[k] = v
-    return defaults, scenes
+                config[k] = v
+    return config
 
 def find_edge(depth_map, threshold, exponent=-1.0):
     is_foreground = depth_map > 0
@@ -327,7 +313,7 @@ def main():
     parser.add_argument("--height", type=int, default=1280, help="Render height")
     
     # Masking and YAML config arguments
-    parser.add_argument("--config", type=str, default="../splat_merge/configs.yaml", help="Path to configs.yaml")
+    parser.add_argument("--config", type=str, default="../splat_merge/configs", help="Path to configs directory or config file")
     parser.add_argument("--scene", type=str, default="pgsrlego", help="Scene name in configs.yaml")
     parser.add_argument("--threshold", type=float, default=0.05, help="Default threshold if not in configs.yaml")
     parser.add_argument("--dilate", type=int, default=3, help="Default dilate iterations if not in configs.yaml")
@@ -339,26 +325,45 @@ def main():
     parser.add_argument("--blend_depth", action="store_true", help="Alpha-blend individual depths instead of alpha-blending plane parameters first")
     args = parser.parse_args()
 
-    # Determine threshold and dilate iterations from configs.yaml if available
+    # Determine threshold and dilate iterations from configs if available
     threshold = args.threshold
     dilate_iterations = args.dilate
+    
+    config_data = {}
     if os.path.exists(args.config):
-        print(f"Loading YAML config from {args.config}...")
-        try:
-            defaults, scenes = load_simple_yaml(args.config)
-            scene = next((s for s in scenes if s.get("name") == args.scene), None)
-            if scene is not None:
-                threshold = scene.get("threshold", defaults.get("threshold", threshold))
-                dilate_iterations = scene.get("dilate", defaults.get("dilate", dilate_iterations))
-                print(f"Loaded config for scene '{args.scene}': threshold={threshold}, dilate={dilate_iterations}")
+        if os.path.isdir(args.config):
+            default_yaml_path = os.path.join(args.config, "default.yaml")
+            if os.path.exists(default_yaml_path):
+                print(f"Loading default config from {default_yaml_path}...")
+                try:
+                    config_data.update(load_simple_yaml(default_yaml_path))
+                except Exception as e:
+                    print(f"Error parsing default YAML config: {e}")
+            
+            scene_yaml_path = os.path.join(args.config, f"{args.scene}.yaml")
+            if os.path.exists(scene_yaml_path):
+                print(f"Loading scene config from {scene_yaml_path}...")
+                try:
+                    config_data.update(load_simple_yaml(scene_yaml_path))
+                except Exception as e:
+                    print(f"Error parsing scene YAML config: {e}")
             else:
-                threshold = defaults.get("threshold", threshold)
-                dilate_iterations = defaults.get("dilate", dilate_iterations)
-                print(f"Scene '{args.scene}' not found in config. Using defaults: threshold={threshold}, dilate={dilate_iterations}")
-        except Exception as e:
-            print(f"Error parsing YAML config: {e}. Using CLI defaults.")
+                print(f"Scene config {scene_yaml_path} not found. Using defaults.")
+        elif os.path.isfile(args.config):
+            print(f"Loading YAML config file from {args.config}...")
+            try:
+                config_data.update(load_simple_yaml(args.config))
+            except Exception as e:
+                print(f"Error parsing YAML config: {e}")
     else:
-        print(f"Config path {args.config} not found. Using CLI defaults: threshold={threshold}, dilate={dilate_iterations}")
+        print(f"Config path {args.config} not found.")
+
+    if config_data:
+        threshold = config_data.get("threshold", threshold)
+        dilate_iterations = config_data.get("dilate", dilate_iterations)
+        print(f"Final config: threshold={threshold}, dilate={dilate_iterations}")
+    else:
+        print(f"No config loaded. Using CLI defaults: threshold={threshold}, dilate={dilate_iterations}")
 
     # Determine upper/lower hemisphere
     upper = not args.lower_hemisphere
@@ -383,19 +388,33 @@ def main():
     print("Reading splats to compute exact object center median...")
     ply = PlyData.read(args.ply)
     v = ply['vertex'].data
-    x_median = np.median(v['x'])
-    y_median = np.median(v['y'])
-    z_median = np.median(v['z'])
+    x_median = np.nanmedian(v['x'])
+    y_median = np.nanmedian(v['y'])
+    z_median = np.nanmedian(v['z'])
     object_center = np.array([x_median, y_median, z_median], dtype=np.float32)
     print(f"Object center (median xyz): {object_center}")
 
     pipeline = PipelineParamsDummy()
     background = torch.tensor([0.0, 0.0, 0.0], dtype=torch.float32, device="cuda")
 
+    import json
+    placement_mode = "upper" if upper else "lower"
+    manifest = {
+        "scene": args.scene,
+        "plyfile": args.ply,
+        "n_cams": args.n_cams,
+        "upper_hemisphere": upper,
+        "placement_mode": placement_mode,
+        "opencv_y_down": args.opencv_y_down,
+        "camera_radius": args.radius,
+        "selected_cam_ids": None,
+        "runs": []
+    }
+
     # 2. Loop through each view
     for cam_idx, direction in enumerate(directions, start=1):
         cam_folder_name = f"cam_{cam_idx:02d}"
-        out_dir = os.path.join(args.output_root, cam_folder_name)
+        out_dir = os.path.join(args.output_root, args.scene, cam_folder_name)
         os.makedirs(out_dir, exist_ok=True)
 
         print(f"\n--- Processing View {cam_idx:02d}/{args.n_cams} ({cam_folder_name}) ---")
@@ -525,6 +544,31 @@ def main():
         color_depth_path = os.path.join(out_dir, "main_view_depth.png")
         Image.fromarray(depth_color).save(color_depth_path)
         print(f"Saved colorized depth map to {color_depth_path}")
+
+        # Append to manifest runs
+        azim, elev = azim_elev_from_dir(direction)
+        rel_cam_dir = os.path.join("output_multicams_tsdf", args.scene, cam_folder_name)
+        manifest["runs"].append({
+            "cam_index": cam_idx,
+            "direction": [float(d) for d in direction],
+            "azim_deg": float(azim),
+            "elev_deg": float(elev),
+            "output_dir": rel_cam_dir,
+            "camera_metadata_file": os.path.join(rel_cam_dir, "camera_main_view.txt"),
+            "preview_rgb_file": os.path.join(rel_cam_dir, "main_view_rgb.png"),
+            "preview_depth_file": os.path.join(rel_cam_dir, "main_view_depth.png"),
+            "preview_alpha_file": os.path.join(rel_cam_dir, "main_view_alpha.png"),
+            "mesh_file": os.path.join(rel_cam_dir, "mesh_multi.glb"),
+            "status": "ok",
+            "returncode": 0,
+            "command": []
+        })
+
+    # Save manifest file
+    manifest_path = os.path.join(args.output_root, args.scene, "fibo_manifest.json")
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=2)
+    print(f"Saved manifest to {manifest_path}")
 
     print("\nAll views processed successfully!")
 
